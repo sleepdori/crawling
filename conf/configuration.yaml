@@ -1,0 +1,129 @@
+default:
+    AppName: slsi_myapp
+    Environment: development
+  
+    log_dir : logs
+    logfile : smip_slsi.log
+    logLevel : DEBUG
+    logformat : "[%(asctime)s] %(name)s %(module)s %(lineno)d %(levelname)s: %(message)s"
+    
+    key_file_path : conf
+    key_file_name : psmi_slsi.key
+    public_key_file : public_slsi_myapp.pem
+    private_key_file : private_slsi_myapp.pem
+
+    crawling :
+        out_path : export
+        use_connection_nm : smip_slsi
+        load_database_type : oracle
+
+        kimovil :
+            sp_list : kimovil_sp_list.json
+            sp_spec : kimovil_sp_spec.json
+            sp_price : kimovil_sp_price.json    
+
+            new_sp_list_target : kimovil_new_sp_list_target_nm.json
+            new_sp_list_fix : kimovil_new_sp_list.json
+            new_sp_spec : kimovil_new_sp_spec.json
+            new_sp_price : kimovil_new_sp_price.json
+
+            query :
+                smip_slsi :
+                    max_sp_no_query : "SELECT MAX(SP_NO) + 1 AS MAX_SP_NO FROM   SMIP_SLSI_DEV.DL_SP_SPEC_EXTR_KMVL_RAW"
+                    is_exists_query : "SELECT COUNT(1) AS CNT FROM   SMIP_SLSI_DEV.DL_SP_SPEC_EXTR_KMVL_RAW  WHERE  LINK_URL = '{}'"
+                crow_pg :
+                    max_sp_no_query : "SELECT MAX(SP_NO) + 1 AS \"MAX_SP_NO\" FROM   INIT.DL_SP_SPEC_EXTR_KMVL_RAW"
+                    is_exists_query : "SELECT COUNT(1) AS \"CNT\" FROM   INIT.DL_SP_SPEC_EXTR_KMVL_RAW  WHERE  LINK_URL = '{}' "
+
+        gsmarena :
+            sp_list : gsmarena_sp_list.json  
+            sp_spec : gsmarena_sp_spec.json
+
+            new_sp_list_target : gsmarena_new_sp_list_target_nm.json
+            new_sp_list_fix : gsmarena_new_sp_list.json
+            new_sp_spec : gsmarena_new_sp_spec.json
+
+            query :
+                smip_slsi :
+                    is_exists_query : "SELECT COUNT(1) AS CNT FROM SMIP_SLSI_DEV.DL_SP_SPEC_EXTR_GSM_RAW  WHERE  BRND_NM = :BRND_NM AND MODEL_NM = :MODEL_NM"
+                    max_sp_no_query : "SELECT MAX(SP_NO) + 1 AS MAX_SP_NO FROM   SMIP_SLSI_DEV.DL_SP_SPEC_EXTR_GSM_RAW"
+                crow_pg :
+                    is_exists_query : "SELECT COUNT(1) AS \"CNT\" FROM INIT.DL_SP_SPEC_EXTR_GSM_RAW  WHERE  BRND_NM = %s AND MODEL_NM = %s"
+                    max_sp_no_query : "SELECT MAX(SP_NO) + 1 AS \"MAX_SP_NO\" FROM   SMIP_SLSI_DEV.DL_SP_SPEC_EXTR_GSM_RAW"
+
+    excel_load :
+        map_file : excel_to_table_map.xlsx
+        use_connection_nm : smip_slsi 
+        load_database_type : oracle
+
+        smip_slsi :
+            load_list_sql : "SELECT SCHM_NM , TBL_NM, SOURCE_TYPE, EXEC_TYPE, SHEET_NM, STRT_PSTN, MELT_YN, READ_TYPE, DRM_YN, ENCD_TYPE, FILE_NM, COND_DTL  FROM DL_MNL_LOAD_DATA_LIST WHERE TBL_NM = '{}'"
+            load_map_sql : "SELECT TBL_NM, CLMN_NO AS COL_NO, CLMN_NM AS COL_NM, VAL_NM, MELT_YN, CHNG_TYPE FROM DL_MNL_LOAD_DATA_DTL ORDER BY TBL_NM, COL_NO"
+
+development:
+    project_home : C:\work\SLSI\project
+
+    ods_schema_nm : SMIP_S
+    dl_schema_nm : SMIP_SLSI_DEV
+    dw_schema_nm : SMIP_SLSI_DWDM_DEV
+    dm_schema_nm : SMIP_SLSI_DWDM_DEV
+
+    databases :
+        smip_slsi :
+            type : oracle
+            host : 127.0.0.1
+            port : 1521
+            database : SMIP_DEV
+            user     : gAAAAABnMZ_Ugy8nw7aBgJo31SLrRjoFWjAaioXbUPV4jml2HeoDalUjymC8pdB1vUcEjsUAQ==                           
+            password : gAAAAABnMZ_UECkDgLdZKa1znJo9_Hae6rYOIdd9Jax98jWJzh8bMVSKaY-TLVmiuqgQ==  
+
+        smip_slsi_dwdm :
+            type : oracle
+            host : 127.0.0.1
+            port : 1521
+            database : SMIP_DEV
+            user     : 7EBf460hRhtryPUFlTY97Pe0C9rpQnDs1WnQtL0iXENV09OQZQAkmMJppyw6GZHO8bdkSx-7fRulvK7RyYyUefYvCi_tgL3AWdWk=                           
+            password :Ka1znJo9_Hae66t8F9ayDr7uA-6OFPiYvtWAW51re5rrYOIdd9Jax98jWJzh8bMVSKaY-TLVmiuqgQ==  
+
+        crow_pg :
+            type : postgresql
+            host : 127.0.0.1
+            port : 5432
+            database : crow_db
+            user     : ktFRA9_v9Q3i2W4TCddcOhzwXRaRMjehw5aoZaRNK4C_rhtBhzsR19UgwO_YXiJNDP_1hAgQ==                        
+            password : rK0rEq58c-DrFw4her2nG1rMMNgNQZ85a4YyG4OkV1l492q0JHqrxIkiwqJRpSzkf9piNyP1bw== 
+
+    endpoint_url : http://127.0.0.1:9020
+    bucket_name : slsios01_dev
+    aws_access_key_id : slsios01_dev
+    aws_secret_access_key : "zmOD-K77EOr0pq86e8T5LuX_WHsdg60IEWbOVqM8jEm5LBY86znHprykZrZtX2DY7x67q3aGAndEVrNeNBx8i1TItEML4H7doZyzb-C9Th0wgj1h"
+    
+production:
+    project_home : C:\work\SLSI\project
+    
+    ods_schema_nm : SMIP_S
+    dl_schema_nm : SMIP_SLSI_PRD
+    dw_schema_nm : SMIP_SLSI_DWDM_PRD
+    dm_schema_nm : SMIP_SLSI_DWDM_PRD
+    
+    databases :
+        smip_slsi :
+            type : oracle
+            host : 127.0.0.1
+            port : 1621
+            database : SMIP_PRD
+            user     : gAAAAABnpFy826da0KcsBwg-esN2YiqOf5h3hc8q2dWxofs4yfeWObg98TWrK1k-B55rLwKtH-ned6PPU==                           
+            password : gAAAAABnpFy8kBvWEN6qFNMkUq0ekPHLfFJpSCdPBl6FfzEm_VJAYIyNRswJMbTmlpjAqspZ1Gmda0SC==  
+
+        smip_slsi_dwdm :
+            type : oracle
+            host : 127.0.0.1
+            port : 1621
+            database : SMIP_PRD
+            user     : gAAAAABnpF2FRsEE0o78jzvSpmSkuc_Q0avsqadElu3WrWQQ6AzeZ7eJzb0gDzfc1-0QqLLhIqkYr9JdJa=                           
+            password : gAAAAABnpF2FpUnVDCIKc6tc4Vo-QakTmzSCF1XzvnxivR9W951Po0-4V8Vxn9JiGpULIXt7tE1O8Wbj6Z== 
+
+    endpoint_url : http://127.0.0.1:9020
+    bucket_name : slsios01_prod
+    aws_access_key_id : slsios01_prod
+    aws_secret_access_key : "gAAAAABnpF4Nxfkjg6thrAJQ_6zib9kCarUo7GuKDOUxcEDtomUiUqgiTnHcC-I_Q_QkKd-6GY9AB3fI7BMf9Ldddh"

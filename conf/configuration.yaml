@@ -57,11 +57,6 @@ default:
 development:
     project_home : C:\work\SLSI\project
 
-    ods_schema_nm : SM_S
-    dl_schema_nm : SMSI_DEV
-    dw_schema_nm : SMSI_DWDM_DEV
-    dm_schema_nm : SMSI_DWDM_DEV
-
     databases :
     
         crow_pg :
@@ -72,18 +67,9 @@ development:
             user     : ktFRA9_v9Q3i2W4TCddcOhzwXRaRMjehw5aoZaRNK4C_rhtBhzsR19UgwO_YXiJNDP_1hAgQ==                        
             password : rK0rEq58c-DrFw4her2nG1rMMNgNQZ85a4YyG4OkV1l492q0JHqrxIkiwqJRpSzkf9piNyP1bw== 
 
-    endpoint_url : http://127.0.0.1:9020
-    bucket_name : slsios01_dev
-    aws_access_key_id : slsios01_dev
-    aws_secret_access_key : "zmOD-K77EOr0pq86e8T5LuX_WHsdg60IEWbOVqM8jEm5LBY86znHprykZrZtX2DY7x67q3aGAndEVrNeNBx8i1TItEML4H7doZyzb-C9Th0wgj1h"
-    
+   
 production:
     project_home : C:\work\SLSI\project
-    
-    ods_schema_nm : SM_S
-    dl_schema_nm : SMSI_PRD
-    dw_schema_nm : SMSI_DWDM_PRD
-    dm_schema_nm : SMSI_DWDM_PRD
     
     databases :
 
@@ -95,7 +81,3 @@ production:
             user     : ktFRA9_v9Q3i2W4TCddcOhzwXRaRMjehw5aoZaRNK4C_rhtBhzsR19UgwO_YXiJNDP_1hAgQ==                        
             password : rK0rEq58c-DrFw4her2nG1rMMNgNQZ85a4YyG4OkV1l492q0JHqrxIkiwqJRpSzkf9piNyP1bw== 
             
-    endpoint_url : http://127.0.0.1:9020
-    bucket_name : slsios01_prod
-    aws_access_key_id : slsios01_prod
-    aws_secret_access_key : "gAAAAABnpF4Nxfkjg6thrAJQ_6zib9kCarUo7GuKDOUxcEDtomUiUqgiTnHcC-I_Q_QkKd-6GY9AB3fI7BMf9Ldddh"

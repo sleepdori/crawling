@@ -3,14 +3,15 @@ import yaml
 from dotenv import load_dotenv
 from util.myutil import get_path_separator
 
-# 환경 변수 로드
+# Python 가상화 스크립트데 PROJECT_HOME 환경변수에 대한 설정을 해놓고 시작
+# 환경 변수 로드  
 load_dotenv()
 
 class ConfigLoader:
     def __init__(self, config_filename="configuration.yaml"):
         # 프로젝트 홈 디렉토리 설정
-        # project_home = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
         project_home = os.getenv("PROJECT_HOME", os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+
         # conf 디렉토리 기준으로 설정 파일 경로 지정
         self.config_file = os.path.join(project_home, "conf", config_filename)
 

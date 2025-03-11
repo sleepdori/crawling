@@ -140,8 +140,6 @@ def gamarena_sp_list(output_file_nm) :
             time.sleep(5)
             page_count += 1
             
+            
         print(f"[INFO] 모든 링크 정보가 { output_file} 에 저장되었습니다. {all_links}")
-    
-
         
-

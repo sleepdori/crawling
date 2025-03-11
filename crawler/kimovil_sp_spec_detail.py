@@ -1,14 +1,31 @@
 import re
 import time
-import cloudscraper
+import requests
+import base64
 from bs4 import BeautifulSoup
 
 class kimovil_sp_spec_detail:
     def __init__(self, proxies):
 
-        self.scraper = cloudscraper.create_scraper()
         self.proxies = proxies
+    def get_response(self, url):
+        data = {
+            "url": f"{url}",
+            "httpResponseBody": True
+        }
 
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Api-Key': 'fa43d9f7-ec8c-4ef5-a6b6-afba22c7a5fd'
+        }
+
+        response = requests.post('https://api.proxyscrape.com/v3/accounts/freebies/scraperapi/request', headers=headers, json=data)
+
+        if response.status_code == 200:
+            return True, response
+        else:
+            return False, f"Error: {response.status_code}"  
+        
     def runCrawling(self, model_info):
         device_link = model_info['device_link']
         device_model = {}
@@ -17,84 +34,92 @@ class kimovil_sp_spec_detail:
         if device_link != None :
             base_url = device_link.replace('－', '-')
         else :
-            return False, f"device line info : None, {model_info}"
+            return False, f"device link info : None, {model_info}"
 
         try:
             # 삼성 내부에서 수행시
-            response = self.scraper.get(base_url, proxies=self.proxies)
-
-            # 삼성 외부에서 수행시
-            # response = self.scraper.get(base_url)
-
-            cf_ray = response.headers.get("CF-RAY")
+            request_success, response = self.get_response(base_url)
+            print(f"request url :{request_success},  {base_url} ==== response code : {response.status_code}")
             
-            if cf_ray is None :
-                print(f"CF-RAY N: {cf_ray}")
-                self.scraper.close()
-                self.scraper = None
-                self.scraper = cloudscraper.create_scraper()
-                time.sleep(5)
-            else :
-                print(f"CF-RAY Y: {cf_ray}, {type(cf_ray)}")
-            
-            print(f"request url :{base_url} ===== response code : {response.status_code}")
-
             if response.status_code == 404 :
                 return False, "404 Not Found.."
-            
-            R_429 = 1
-            while response.status_code != 200:
-                if response.status_code == 404 :
-                    return False, "404 Not Found.."
                 
-                time.sleep(5)
+            retry_count = 0
+            while response.status_code != 200 :
+                if response.status_code == 404 :
+                    return False, "404 Not found.."
+                    
+                if retry_count > 5 :
+                    return False, f"max retry count error ! response code = {response.status_code}"
+                    
+                wait_time = 20
+                if response.status_code == 429 :
+                    retry_after = response.headers.get('Retry-After')
+                    print(f"Rate limit exceeded. Retry after {retry_after} seconds.")
+                    wait_time = int(retry_after)/20
+                    
+                print(f"wait time : {wait_time}")
+                time.sleep(wait_time)
+                
+                retry_count += 1
+                # response = requests.get(base_url)
+                request_success, response = self.get_response(base_url)
+                print(f"Retry count : {retry_count}, request url : {base_url} ==== response code ; {response.status_code}")
 
-                # 삼성 내부에서 수행시
-                response = self.scraper.get(base_url, proxies=self.proxies)
-                # 삼성 외부에서 수행시
-                # response = self.scraper.get(base_url)
+            json_response = response.json()
 
-                cf_ray = response.headers.get("CF-RAY")
-
-                if cf_ray is None or R_429 % 3 == 0:
-                    print(f"CF-RAY N: {cf_ray}")
-                    self.scraper.close()
-                    self.scraper = None
-                    self.scraper = cloudscraper.create_scraper()
-                    time.sleep(5)
-                else :
-                    print(f"CF-RAY Y: {cf_ray}, {type(cf_ray)}")
-                    print(f"Retry request url :{base_url} ===== response code : {response.status_code}")
-
-                R_429 += 1
+            if 'browserHtml' in json_response['data']:
+                html_content = json_response['data']['browserHtml']
+            else:
+                # html_content = base64.b64decode(json_response['data']['httpResponseBody']).decode()               
+                html_content = base64.b64decode(json_response['data']['httpResponseBody'], validate=True).decode('utf-8', errors='ignore')  
 
             if response.status_code == 200 : 
 
-                soup = BeautifulSoup(response.text, "html.parser")
+                soup = BeautifulSoup(html_content, "html.parser")
                 detail_body_tag = soup.find("article", class_="container-datasheet")
                 if detail_body_tag != None:
                     wrapper_tag = detail_body_tag.find("div", class_="wrapper")
                     if wrapper_tag != None :
                         idx = 0
-                        for brand_table_tag in wrapper_tag.find_all("table", class_="k-dltable") :
-                            rows = brand_table_tag.find_all('tr')
-                            td_tag = rows[0].find_all('td')
-                            if idx == 0 :
-                                brand_name = td_tag[0].find('a').get_text(strip=True)
-                                device_model['site'] = 'kimovil'
-                                device_model['category'] = brand_name
-                                device_model['brand_name'] = brand_name
-                                device_model['brand_model'] = model_info['device_name']
-                                device_model['model_version'] = model_info['device_version']
-                                device_model['link_url'] = base_url
-                                print(f"brand_name : {brand_name}")
-                            
-                            if idx == 1 :
-                                release_date = td_tag[0].get_text(strip=True).split(',')[0]
-                                device_model['release_date'] = release_date
-                                print(f"release_date : {release_date}")
+                        brand_table_tag = wrapper_tag.find_all("table", class_="k-dltable")
+                        if brand_table_tag :
+                            device_model['site'] = 'kimovil'
+                            device_model['link_url'] = base_url
+                            device_model['brand_model'] = model_info['device_name']
+                            device_model['model_version'] = model_info['device_version'] 
+                                                      
+                            for brand_table_tag in wrapper_tag.find_all("table", class_="k-dltable") :
+                                rows = brand_table_tag.find_all('tr')
+                                td_tag = rows[0].find_all('td')
+                                if idx == 0 :
+                                    brand_name = td_tag[0].find('a').get_text(strip=True)
+                                    device_model['category'] = brand_name
+                                    device_model['brand_name'] = brand_name
+                                    print(f"brand_name : {brand_name}")
+                                
+                                if idx == 1 :
+                                    release_date = td_tag[0].get_text(strip=True).split(',')[0]
+                                    device_model['release_date'] = release_date
+                                    print(f"release_date : {release_date}")
 
-                            idx += 1
+                                idx += 1
+                        else :
+                            dl_tags = wrapper_tag.find_all("dl", class_="k-dl")
+                            if dl_tags : 
+                                idx = 0
+                                for dl_tag in dl_tags :
+                                    dt_text = dl_tag.find('dt').get_text(strip=True).upper() 
+                                    if dt_text == "BRAND" :
+                                        brand_name = dl_tag.find('dd').get_text(strip=True)
+                                        device_model['category'] = brand_name
+                                        device_model['brand_name'] = brand_name
+                                        print(f"brand_name : {brand_name}")
+                                    if dt_text == "RELEASE DATE" :
+                                        release_date = dl_tag.find('dd').get_text(strip=True)
+                                        device_model['release_date'] = release_date
+                                        print(f"release_date : {release_date}")
+
                         price_tbl_tag = wrapper_tag.find_all("table", class_="version-prices-table k-datatable") 
                         if price_tbl_tag != None :
                             for price_tag in price_tbl_tag :
@@ -409,46 +434,89 @@ class kimovil_sp_spec_detail:
 
                                 for camera_tag in div_tag.find_all("div", class_="w50") :
                                     table_tag = camera_tag.find('table', class_="k-dltable")
-                                    rows = table_tag.find_all('tr') 
+                                    if table_tag :
+                                        rows = table_tag.find_all('tr') 
 
-                                    for row in rows :
-                                        if "RESOLUTION" in row.find_all('th')[0].get_text(strip=True).upper() :
-                                            selfie_resolution  = row.find_all('td')[0].get_text(strip=True)
-                                            device_model['selfie_resolution'] = selfie_resolution
-                                            print(f"selfie_resolution : {selfie_resolution}")
+                                        for row in rows :
+                                            if "RESOLUTION" in row.find_all('th')[0].get_text(strip=True).upper() :
+                                                selfie_resolution  = row.find_all('td')[0].get_text(strip=True)
+                                                device_model['selfie_resolution'] = selfie_resolution
+                                                print(f"selfie_resolution : {selfie_resolution}")
 
-                                        if "SENSOR" in row.find_all('th')[0].get_text(strip=True).upper() and "SIZE" not in row.find_all('th')[0].get_text(strip=True).upper() :
-                                            selfie_sensor  = row.find_all('td')[0].get_text(strip=True)
-                                            device_model['selfie_sensor'] = selfie_sensor
-                                            print(f"selfie_sensor : {selfie_sensor}")
+                                            if "SENSOR" in row.find_all('th')[0].get_text(strip=True).upper() and "SIZE" not in row.find_all('th')[0].get_text(strip=True).upper() :
+                                                selfie_sensor  = row.find_all('td')[0].get_text(strip=True)
+                                                device_model['selfie_sensor'] = selfie_sensor
+                                                print(f"selfie_sensor : {selfie_sensor}")
 
-                                        if "TYPE" in row.find_all('th')[0].get_text(strip=True).upper() :
-                                            selfie_type  = row.find_all('td')[0].get_text(strip=True)
-                                            device_model['selfie_type'] = selfie_type
-                                            print(f"selfie_type : {selfie_type}")
+                                            if "TYPE" in row.find_all('th')[0].get_text(strip=True).upper() :
+                                                selfie_type  = row.find_all('td')[0].get_text(strip=True)
+                                                device_model['selfie_type'] = selfie_type
+                                                print(f"selfie_type : {selfie_type}")
 
-                                        if "APERTURE" in row.find_all('th')[0].get_text(strip=True).upper() :
-                                            selfie_aperture  = row.find_all('td')[0].get_text(strip=True)
-                                            device_model['selfie_aperture'] = selfie_aperture
-                                            print(f"selfie_aperture : {selfie_aperture}")
+                                            if "APERTURE" in row.find_all('th')[0].get_text(strip=True).upper() :
+                                                selfie_aperture  = row.find_all('td')[0].get_text(strip=True)
+                                                device_model['selfie_aperture'] = selfie_aperture
+                                                print(f"selfie_aperture : {selfie_aperture}")
 
-                                        if "PIXEL SIZE" in row.find_all('th')[0].get_text(strip=True).upper() :
-                                            selfie_pixel_size  = row.find_all('td')[0].get_text(strip=True)
-                                            device_model['selfie_pixel_size'] = selfie_pixel_size
-                                            print(f"selfie_pixel_size : {selfie_pixel_size}")
+                                            if "PIXEL SIZE" in row.find_all('th')[0].get_text(strip=True).upper() :
+                                                selfie_pixel_size  = row.find_all('td')[0].get_text(strip=True)
+                                                device_model['selfie_pixel_size'] = selfie_pixel_size
+                                                print(f"selfie_pixel_size : {selfie_pixel_size}")
 
-                                        if "BINNING" in row.find_all('th')[0].get_text(strip=True).upper() :
-                                            selfie_pixel_binning  = row.find_all('td')[0].get_text(strip=True)
-                                            device_model['selfie_pixel_binning'] = selfie_pixel_binning
-                                            print(f"selfie_pixel_binning : {selfie_pixel_binning}")                                        
-                                        
-                                        if "SENSOR SIZE" in row.find_all('th')[0].get_text(strip=True).upper() :  
-                                            selfie_sensor_size  = row.find_all('td')[0].get_text(strip=True)
-                                            device_model['selfie_sensor_size'] = selfie_sensor_size
-                                            print(f"selfie_sensor_size : {selfie_sensor_size}")                                        
+                                            if "BINNING" in row.find_all('th')[0].get_text(strip=True).upper() :
+                                                selfie_pixel_binning  = row.find_all('td')[0].get_text(strip=True)
+                                                device_model['selfie_pixel_binning'] = selfie_pixel_binning
+                                                print(f"selfie_pixel_binning : {selfie_pixel_binning}")                                        
+                                            
+                                            if "SENSOR SIZE" in row.find_all('th')[0].get_text(strip=True).upper() :  
+                                                selfie_sensor_size  = row.find_all('td')[0].get_text(strip=True)
+                                                device_model['selfie_sensor_size'] = selfie_sensor_size
+                                                print(f"selfie_sensor_size : {selfie_sensor_size}") 
+                                    else :
+                                        dl_tag = camera_tag.find('dl', class_="k-dl")
+                                        if dl_tag :
+                                            dt_list = dl_tag.find_all('dt')
+                                            dd_list = dl_tag.find_all('dd')
 
+                                            for dt, dd in zip(dt_list, dd_list) :                                 
+                                                if "RESOLUTION" in dt.get_text(strip=True).upper() :
+                                                    selfie_resolution  = dd.get_text(strip=True)
+                                                    device_model['selfie_resolution'] = selfie_resolution
+                                                    print(f"selfie_resolution : {selfie_resolution}")
+
+                                                if "SENSOR" in dt.get_text(strip=True).upper() and "SIZE" not in dt.get_text(strip=True).upper() :
+                                                    selfie_sensor  = dd.get_text(strip=True)
+                                                    device_model['selfie_sensor'] = selfie_sensor
+                                                    print(f"selfie_sensor : {selfie_sensor}")
+
+                                                if "TYPE" in dt.get_text(strip=True).upper() :
+                                                    selfie_type  = dd.get_text(strip=True)
+                                                    device_model['selfie_type'] = selfie_type
+                                                    print(f"selfie_type : {selfie_type}")
+
+                                                if "APERTURE" in dt.get_text(strip=True).upper() :
+                                                    selfie_aperture  = dd.get_text(strip=True)
+                                                    device_model['selfie_aperture'] = selfie_aperture
+                                                    print(f"selfie_aperture : {selfie_aperture}")
+
+                                                if "PIXEL SIZE" in dt.get_text(strip=True).upper() :
+                                                    selfie_pixel_size  = dd.get_text(strip=True)
+                                                    device_model['selfie_pixel_size'] = selfie_pixel_size
+                                                    print(f"selfie_pixel_size : {selfie_pixel_size}")
+                                                
+                                                if "BINNING" in dt.get_text(strip=True).upper() :
+                                                    selfie_pixel_binning  = dd.get_text(strip=True)
+                                                    device_model['selfie_pixel_binning'] = selfie_pixel_binning
+                                                    print(f"selfie_pixel_binning : {selfie_pixel_binning}")     
+                                                
+                                                if "SENSOR SIZE" in dt.get_text(strip=True).upper() :
+                                                    selfie_sensor_size  = dd.get_text(strip=True)
+                                                    device_model['selfie_sensor_size'] = selfie_sensor_size
+                                                    print(f"selfie_sensor_size : {selfie_sensor_size}") 
+                                        else :
+                                            device_model['selfie_yn'] = "No"
+                                            print(f"selfie_yn : No")
                             idx += 1
-
 
                         flash_tbl_tag = section_tag.find_all('table', class_='k-dltable')
 
@@ -483,7 +551,26 @@ class kimovil_sp_spec_detail:
                                         cnt += 1       
                                     device_model['camera_features'] = camera_features  
                                     print(f"camera_features : {camera_features}")                       
-                                
+
+                        dl_tags = section_tag.find_all('dl', class_='k-dl')
+                        if dl_tags :
+                            for dl_tag in dl_tags :
+                                dt_text = dl_tag.find('dt').get_text(strip=True).upper()
+                                if dt_text == "EXTRA" :
+                                    dd_tag = dl_tag.find('dd')
+
+                                    li_tag  = dd_tag.find_all('li')
+                                    li_cnt = 0
+                                    camera_extra = ''
+                                    for li in li_tag :
+                                        if li_cnt == 0 :
+                                            camera_extra = li.get_text(strip=True)
+                                        else :
+                                            camera_extra = camera_extra + ", " + li.get_text(strip=True)
+                                        li_cnt += 1
+                                    device_model['camera_extra'] = camera_extra
+                                    print(f"camera_extra : {camera_extra}")  
+                                    
                     section_tag = detail_body_tag.find('section', class_='kc-container white container-sheet-battery')
                     if section_tag != None :
 
@@ -533,7 +620,7 @@ class kimovil_sp_spec_detail:
                                         print(f"battery_extra : {battery_extra}")  
 
                         except Exception as ee :
-                            print(f"battery : {str(ee)}")
+                            print(f"battery parsing Error : {str(ee)}")
 
                     section_tag = detail_body_tag.find('section', class_='kc-container white container-sheet-software')
                     if section_tag != None :
@@ -551,6 +638,7 @@ class kimovil_sp_spec_detail:
 
                 else :
                     print('soup.find("div", class_="lay-main") tag not found...')
+                    return False, 'soup.find("div", class_="lay-main") tag not found...'
                     
         except Exception as e:
             success = False
@@ -571,4 +659,3 @@ if __name__ == "__main__":
     success, results = crawler.runCrawling(model_info)
 
     print(f"{success}, {results}")
-

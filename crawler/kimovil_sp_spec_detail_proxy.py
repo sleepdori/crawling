@@ -3,29 +3,44 @@ import time
 import requests
 import base64
 from bs4 import BeautifulSoup
+import warnings
+
+# SSL 경고 메시지 숨기기
+warnings.simplefilter("ignore", category=requests.packages.urllib3.exceptions.InsecureRequestWarning)
+
+# Scrape.do 프록시 설정
+SCRAPE_DO_TOKEN = ["d635764e256a4fddb14381e5fcdeb4e97794bf28689", "be079bbf72724e4a877f36979e057b20d165b4360c9", "2c7448f542bd4555a617d17d53f2bd855250f3ad2bf"]
+SCRAPE_DO_TOKEN_IDX = 0
+MAX_SCRAPE_DO_TOKEN_IDX = len(SCRAPE_DO_TOKEN) - 1
+SCRAPE_DO_PROXY = f"http://{SCRAPE_DO_TOKEN[SCRAPE_DO_TOKEN_IDX]}:customHeaders=false@proxy.scrape.do:8080"
+
+def next_proxy():
+    global SCRAPE_DO_TOKEN_IDX, SCRAPE_DO_PROXY
+
+    if SCRAPE_DO_TOKEN_IDX < MAX_SCRAPE_DO_TOKEN_IDX:
+        SCRAPE_DO_TOKEN_IDX += 1
+        SCRAPE_DO_PROXY = f"http://{SCRAPE_DO_TOKEN[SCRAPE_DO_TOKEN_IDX]}:customHeaders=false@proxy.scrape.do:8080"
+        proxies = {
+            "http": SCRAPE_DO_PROXY,
+            "https": SCRAPE_DO_PROXY
+        }
+        print(f"✅ SCRAPE_DO_TOKEN_IDX = {SCRAPE_DO_TOKEN_IDX}, 변경된 토큰: {SCRAPE_DO_TOKEN[SCRAPE_DO_TOKEN_IDX]}")
+        return True, proxies  # ✅ 올바르게 (성공여부, proxies) 반환
+    else:
+        return False, "⚠️ 모든 토큰의 허용량을 사용했습니다. (한 달 허용량: 3000 Call)"
 
 class kimovil_sp_spec_detail:
-    def __init__(self, proxies):
+    def __init__(self):
 
-        self.proxies = proxies
-    def get_response(self, url):
-        data = {
-            "url": f"{url}",
-            "httpResponseBody": True
+        self.proxies = {
+            "http": SCRAPE_DO_PROXY,
+            "https": SCRAPE_DO_PROXY
         }
-
-        headers = {
-            'Content-Type': 'application/json',
-            'X-Api-Key': 'fa43d9f7-ec8c-4ef5-a6b6-afba22c7a5fd'
-        }
-
-        response = requests.post('https://api.proxyscrape.com/v3/accounts/freebies/scraperapi/request', headers=headers, json=data)
-
-        if response.status_code == 200:
-            return True, response
-        else:
-            return False, f"Error: {response.status_code}"  
         
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+        }       
+
     def runCrawling(self, model_info):
         device_link = model_info['device_link']
         device_model = {}
@@ -37,46 +52,67 @@ class kimovil_sp_spec_detail:
             return False, f"device link info : None, {model_info}"
 
         try:
-            # 삼성 내부에서 수행시
-            request_success, response = self.get_response(base_url)
-            print(f"request url :{request_success},  {base_url} ==== response code : {response.status_code}")
+            response = None
+            try :
+                response = requests.get(base_url, headers=self.headers, proxies=self.proxies, verify=False)
+                if response.status_code == 401 :
+                    next_status, next_proxies = next_proxy()
+                    if next_status :
+                        self.proxies = next_proxies
+                        print(f"proxies 토큰 변경 : {self.proxies}, {next_proxies}")
+                    else :
+                        print(f"Error : {next_proxies}")  
+                        exit(1)                 
+            except Exception as ee :
+                print(ee)
+
+            if response is not None :
+                print(f"request url : {base_url} ==== response code : {response.status_code}")
             
-            if response.status_code == 404 :
+            if response is not None and response.status_code == 404 :
                 return False, "404 Not Found.."
                 
             retry_count = 0
-            while response.status_code != 200 :
-                if response.status_code == 404 :
+            while response is not None and response.status_code != 200 :
+                if response is not None and response.status_code == 404 :
                     return False, "404 Not found.."
                     
-                if retry_count > 5 :
+                if retry_count > 20 :
                     return False, f"max retry count error ! response code = {response.status_code}"
                     
-                wait_time = 20
-                if response.status_code == 429 :
+                wait_time = 10
+                if response is not None and response.status_code == 429 :
                     retry_after = response.headers.get('Retry-After')
                     print(f"Rate limit exceeded. Retry after {retry_after} seconds.")
-                    wait_time = int(retry_after)/20
-                    
+                          
                 print(f"wait time : {wait_time}")
                 time.sleep(wait_time)
                 
                 retry_count += 1
-                # response = requests.get(base_url)
-                request_success, response = self.get_response(base_url)
-                print(f"Retry count : {retry_count}, request url : {base_url} ==== response code ; {response.status_code}")
+                try :
+                    response = requests.get(base_url, headers=self.headers, proxies=self.proxies, verify=False)
+                    if response.status_code == 401 :
+                        next_status, next_proxies = next_proxy()
+                        if next_status :
+                            self.proxies = next_proxies
+                            print(f"proxies 토큰 변경 : {self.proxies}, {next_proxies}")
+                        else :
+                            print(f"Error : {next_proxies}")  
+                            exit(1)                      
+                except Exception as ee :
+                    print(ee)
 
-            json_response = response.json()
+                if response is not None :
+                    print(f"Retry count : {retry_count}, request url : {base_url} ==== response code ; {response.status_code}")
 
-            if 'browserHtml' in json_response['data']:
-                html_content = json_response['data']['browserHtml']
-            else:
-                # html_content = base64.b64decode(json_response['data']['httpResponseBody']).decode()               
-                html_content = base64.b64decode(json_response['data']['httpResponseBody'], validate=True).decode('utf-8', errors='ignore')  
+            # json_response = response.json()
+            # print(json_response.keys())
+            # html_content = json_response['content']  
 
             if response.status_code == 200 : 
 
-                soup = BeautifulSoup(html_content, "html.parser")
+                # soup = BeautifulSoup(html_content, "html.parser")
+                soup = BeautifulSoup(response.text, "html.parser")
                 detail_body_tag = soup.find("article", class_="container-datasheet")
                 if detail_body_tag != None:
                     wrapper_tag = detail_body_tag.find("div", class_="wrapper")
@@ -659,4 +695,3 @@ if __name__ == "__main__":
     success, results = crawler.runCrawling(model_info)
 
     print(f"{success}, {results}")
-

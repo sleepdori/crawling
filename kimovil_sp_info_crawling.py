@@ -128,4 +128,3 @@ if len(valid_columns) > 2 :
     print(out_price_file_nm, f"model count {len(price_df)}")
     with open(out_price_file_nm, 'w', encoding='utf-8') as jf:
         json.dump(df_no_nulls.to_dict(orient='records'), jf, ensure_ascii=False, indent=4)
-

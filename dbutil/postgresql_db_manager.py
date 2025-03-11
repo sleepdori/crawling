@@ -103,7 +103,6 @@ class PostgreSQLManager:
             columns = [desc[0] for desc in self.cursor.description]
             rows = self.cursor.fetchall()
             result = [dict(zip(columns, row)) for row in rows]
-            print(result)
             return result
         except psycopg2.Error as error:
             print(f"Select Error: {error}")

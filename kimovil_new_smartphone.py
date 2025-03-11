@@ -5,18 +5,16 @@ import sys
 import pandas as pd
 from common.config_loader import ConfigLoader
 from common.print_to_logger import PrintToLogger
-from cipher.crypto_util import CryptoUtil
+from cipher.crypto_util import crypto_util
 from dbutil.oracle_db_manager import OracleDBManager
 from dbutil.postgresql_db_manager import PostgreSQLManager
-# from crawler.kimovil_sp_spec_detail import kimovil_sp_spec_detail
-from crawler.kimovil_sp_spec_detail_proxy import kimovil_sp_spec_detail
 from util.myutil import read_json
 
 
 config = ConfigLoader()
 path_separator = config.get_path_separator()
 project_home = config.get("project_home")
-log_dir = f'{config.get("project_home")}{path_separator}{config.get("log_dir")}'
+log_dir = f'{project_home}{path_separator}{config.get("log_dir")}'
 
 logfile = config.get("logfile")
 logLevel = config.get("logLevel")
@@ -29,14 +27,10 @@ crawling_out_path = config.get("crawling", "out_path")
 use_connection_nm = config.get("crawling", "use_connection_nm")
 load_database_type = config.get("crawling", "load_database_type")
 
-
-
-
-
 key_file_path = config.get('key_file_path')
 key_file_name = config.get('key_file_name')
 
-crypto = CryptoUtil(key_file_path, key_file_name)
+crypto = crypto_util(key_file_path, key_file_name)
 
 HOST = config.get("databases", use_connection_nm, "host")
 PORT = config.get("databases", use_connection_nm, "port")
@@ -52,7 +46,7 @@ elif load_database_type.lower() == 'postgresql' :
     db_mgr = PostgreSQLManager(DB_USER, DB_PASS, HOST, PORT, DATABASE)
 
 max_sp_no_query = config.get("crawling", "kimovil","query", use_connection_nm, "max_sp_no_query")
-sp_no = 100000
+sp_no = 1
 is_sp_model_check_query = config.get("crawling", "kimovil","query", use_connection_nm, "is_exists_query")
 # 연결 시도
 connected = db_mgr.check_connection()
@@ -66,12 +60,7 @@ for row in result:
     sp_no = row['MAX_SP_NO']
     print(f"max sp_no : {sp_no}")
 
-crawling_out_path = config.get("crawling", "out_path")
-use_connection_nm = config.get("crawling", "use_connection_nm")
-load_database_type = config.get("crawling", "load_database_type")
-
 kimovil_new_sp_list_target_nm = config.get("crawling", "kimovil", "new_sp_list_target")
-
 kimovil_new_sp_list_fix = config.get("crawling", "kimovil", "new_sp_list_fix")
 kimovil_new_sp_spec = config.get("crawling", "kimovil", "new_sp_spec")
 kimovil_new_sp_price = config.get("crawling", "kimovil", "new_sp_price")
@@ -90,20 +79,12 @@ print(f"load_price_json_file_name : {price_json_file_name}")
 
 price_col = ['price_model1','price_regn1','price_memory1','price_storage1','p_price1','price_model2','price_regn2','price_memory2','price_storage2','p_price2','price_model3','price_regn3','price_memory3','price_storage3','p_price3','price_model4','price_regn4','price_memory4','price_storage4','p_price4','price_model5','price_regn5','price_memory5','price_storage5','p_price5','price_model6','price_regn6','price_memory6','price_storage6','p_price6','price_model7','price_regn7','price_memory7','price_storage7','p_price7','price_model8','price_regn8','price_memory8','price_storage8','p_price8','price_model9','price_regn9','price_memory9','price_storage9','p_price9','price_model10','price_regn10','price_memory10','price_storage10','p_price10','price_model11','price_regn11','price_memory11','price_storage11','p_price11' ]
 
-model_spec_info = []
-
-proxies = {
-    'http': 'http://12.26.204.100:8080',
-    'https': 'http://12.26.204.100:8080'
-}
-
 #JSON 파일에서 smart phone 목록 조회
-crawling_urls = read_json(new_sp_list_input_file)
-print(f"crawling_urls count : {len(crawling_urls)}")
+new_sp_target_list = read_json(new_sp_list_input_file)
+new_sp_target_spec = read_json(spec_src_json_file_name)
+print(f"신규 처리 대상 건수(예상) : {len(new_sp_target_list)}")
 
-spec_crawler = kimovil_sp_spec_detail(proxies)
-
-for device_index, model_info in crawling_urls.iterrows() :
+for device_index, model_info in new_sp_target_list.iterrows() :
     check_query = is_sp_model_check_query.format(model_info['device_link'])
     result = db_mgr.select(check_query)
 
@@ -113,40 +94,28 @@ for device_index, model_info in crawling_urls.iterrows() :
         print(f"url info : {model_info['device_link']} , db check count : {is_cnt} ")
         if is_cnt > 0 :
             is_check = True
-            crawling_urls.drop(index=device_index, inplace=True)
-    
+            new_sp_target_list.drop(index=device_index, inplace=True)
+            new_sp_target_spec = new_sp_target_spec.query(f"{model_info['device_seq']} != '35'")
     if is_check == False :
         print(f"device_index : {device_index}, url info : {model_info['device_link']}")
-        crawling_urls.at[device_index, 'device_seq'] = sp_no
-        spec_success, model_spec_detail = spec_crawler.runCrawling(model_info)
+        new_sp_target_spec.loc[new_sp_target_spec['device_seq'] == model_info['device_seq'], "device_seq"] = sp_no
+        new_sp_target_list.at[device_index, 'device_seq'] = sp_no
         
-        if spec_success : 
-            model_spec_detail['device_seq'] = sp_no
-            model_spec_info.append(model_spec_detail)
-            crawling_urls.at[device_index, 'brand_name'] = model_spec_detail['brand_name']
-        else :
-            print(f"{model_info['device_link']} rslt : {spec_success}, {model_spec_detail}")
-
-        print(f"Crawling Count : {device_index}")
-
         sp_no += 1
 
-        time.sleep(10)
-
-        # if sp_no % 5 == 0 :
-        #     break
+        time.sleep(1)
 
 # 크롤링 한 원천 결과 파일 저장
-print(spec_src_json_file_name, f"model count {len(model_spec_info)}")
+print(spec_src_json_file_name, f"model count {len(new_sp_target_spec)}")
 with open(spec_src_json_file_name, 'w') as jf:
-    json.dump(model_spec_info, jf, indent=4)
+    json.dump(new_sp_target_spec.to_dict(orient='records'), jf, indent=4)
 
 price_column_list = []
 price_column_list.append('device_seq')
 for col in price_col :
     price_column_list.append(col)
 
-df = pd.DataFrame(model_spec_info)
+df = pd.DataFrame(new_sp_target_spec)
 # 크롤링 한 원천 결과 파일 에서 가격 정보를 제외한 스펙 정보 저장
 for col in price_col :
     if col in df.columns :
@@ -158,13 +127,18 @@ with open(spec_json_file_name, 'w') as jf:
 
 
 # 크롤링 한 원천 결과 파일 에서 가격 정보를 추출하여 정제
-df = pd.DataFrame(model_spec_info)
+df = pd.DataFrame(new_sp_target_spec)
 valid_columns = [col for col in price_column_list if col in df.columns]
 
 if len(valid_columns) > 2 : 
     price_df = df.loc[:, valid_columns]
 
-    df_no_nulls = price_df.dropna(subset=['price_model1'])
+    # df_no_nulls = price_df.dropna(subset=['price_model1'])
+    if "price_model1" in price_df.columns:
+        df_no_nulls = price_df.dropna(subset=['price_model1'])
+    else:
+        print("Warning: `price_model1` column not found in price_df.")
+        df_no_nulls = price_df
 
     melted = pd.melt(df_no_nulls, id_vars=['device_seq'], var_name='attribute', value_name='value')
 
@@ -196,6 +170,6 @@ if len(valid_columns) > 2 :
 
 
 # 크롤링 리스트에서 신규건 리스트 저장
-print(list_json_file_name, f"model count {len(crawling_urls)}")
+print(list_json_file_name, f"model count {len(new_sp_target_list)}")
 with open(list_json_file_name, 'w') as jf:
-    json.dump(crawling_urls.to_dict(orient='records'), jf, indent=4)
+    json.dump(new_sp_target_list.to_dict(orient='records'), jf, indent=4)

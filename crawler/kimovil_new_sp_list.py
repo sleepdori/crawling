@@ -14,7 +14,7 @@ def get_response(url):
 
     headers = {
         'Content-Type': 'application/json',
-        'X-Api-Key': 'fa43d9f7-ec8c-4ef5-a6b6-afba22c7a5fd'
+        'X-Api-Key': '5a860887-0729-4600-84eb-8be3d1217fb5'
     }
 
     response = requests.post('https://api.proxyscrape.com/v3/accounts/freebies/scraperapi/request', headers=headers, json=data)

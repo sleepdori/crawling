@@ -3,9 +3,44 @@ import time
 import base64
 import re
 from bs4 import BeautifulSoup
+import warnings
+
+# SSL 경고 메시지 숨기기
+warnings.simplefilter("ignore", category=requests.packages.urllib3.exceptions.InsecureRequestWarning)
+
+# Scrape.do 프록시 설정
+SCRAPE_DO_TOKEN = ["d635764e256a4fddb14381e5fcdeb4e97794bf28689", "be079bbf72724e4a877f36979e057b20d165b4360c9", "2c7448f542bd4555a617d17d53f2bd855250f3ad2bf"]
+SCRAPE_DO_TOKEN_IDX = 0
+MAX_SCRAPE_DO_TOKEN_IDX = len(SCRAPE_DO_TOKEN) - 1
+SCRAPE_DO_PROXY = f"http://{SCRAPE_DO_TOKEN[SCRAPE_DO_TOKEN_IDX]}:customHeaders=false@proxy.scrape.do:8080"
+
+def next_proxy():
+    global SCRAPE_DO_TOKEN_IDX, SCRAPE_DO_PROXY
+
+    if SCRAPE_DO_TOKEN_IDX < MAX_SCRAPE_DO_TOKEN_IDX:
+        SCRAPE_DO_TOKEN_IDX += 1
+        SCRAPE_DO_PROXY = f"http://{SCRAPE_DO_TOKEN[SCRAPE_DO_TOKEN_IDX]}:customHeaders=false@proxy.scrape.do:8080"
+        proxies = {
+            "http": SCRAPE_DO_PROXY,
+            "https": SCRAPE_DO_PROXY
+        }
+        print(f"✅ SCRAPE_DO_TOKEN_IDX = {SCRAPE_DO_TOKEN_IDX}, 변경된 토큰: {SCRAPE_DO_TOKEN[SCRAPE_DO_TOKEN_IDX]}")
+        return True, proxies  # ✅ 올바르게 (성공여부, proxies) 반환
+    else:
+        return False, "⚠️ 모든 토큰의 허용량을 사용했습니다. (한 달 허용량: 3000 Call)"
+
 
 class gsmarena_sp_spec_detail :
     def __init__(self) :
+
+        self.proxies = {
+            "http": SCRAPE_DO_PROXY,
+            "https": SCRAPE_DO_PROXY
+        }
+        
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+        }           
         self.model_info = None
         self.base_url = None
         
@@ -13,24 +48,6 @@ class gsmarena_sp_spec_detail :
         for key, value in device_model.items() :
             print(f"{key} : {value}")
     
-    def get_response(self, url):
-        data = {
-            "url": f"{url}",
-            "httpResponseBody": True
-        }
-
-        headers = {
-            'Content-Type': 'application/json',
-            'X-Api-Key': 'fa43d9f7-ec8c-4ef5-a6b6-afba22c7a5fd'
-        }
-
-        response = requests.post('https://api.proxyscrape.com/v3/accounts/freebies/scraperapi/request', headers=headers, json=data)
-
-        if response.status_code == 200:
-            return True, response
-        else:
-            return False, f"Error: {response.status_code}"     
-              
     def run_crawling(self, model_info) :
         self.model_info = model_info
         self.base_url = model_info['device_link']        
@@ -48,44 +65,65 @@ class gsmarena_sp_spec_detail :
             return False, f"device line info : None, {self.model_info}"
             
         try :
-            # response = requests.get(base_url)
-            request_success, response = self.get_response(base_url)
-            print(f"request url :{request_success},  {base_url} ==== response code : {response.status_code}")
+            response = None 
+            try :
+                response = requests.get(base_url, headers=self.headers, proxies=self.proxies, verify=False)
+                print(f"response = {response}, response code : {response.status_code}, {type(response.status_code)}")
+                if response.status_code == 401 :
+                    next_status, next_proxies = next_proxy()
+                    if next_status :
+                        self.proxies = next_proxies
+                        print(f"proxies 토큰 변경 : {self.proxies}, {next_proxies}")
+                    else :
+                        print(f"Error : {next_proxies}")  
+                        exit(1)                  
+            except Exception as ee :
+                print(ee)            
             
-            if response.status_code == 404 :
+            print(f"request url : {base_url} ==== response code : {response.status_code}")
+            
+            if response is not None and response.status_code == 404 :
                 return False, "404 Not Found.."
                 
             retry_count = 0
-            while response.status_code != 200 :
-                if response.status_code == 404 :
+            while response is not None and response.status_code != 200 :
+                if response is not None and response.status_code == 404 :
                     return False, "404 Not found.."
                     
-                if retry_count > 5 :
+                if retry_count > 15 :
                     return False, f"max retry count error ! response code = {response.status_code}"
                     
-                wait_time = 20
-                if response.status_code == 429 :
+                wait_time = 10
+                if response is not None and response.status_code == 429 :
                     retry_after = response.headers.get('Retry-After')
                     print(f"Rate limit exceeded. Retry after {retry_after} seconds.")
-                    wait_time = int(retry_after)/20
                     
                 print(f"wait time : {wait_time}")
                 time.sleep(wait_time)
                 
                 retry_count += 1
-                # response = requests.get(base_url)
-                request_success, response = self.get_response(base_url)
+                try :
+                    response = requests.get(base_url, headers=self.headers, proxies=self.proxies, verify=False)
+                    print(f"response = {response}, response code : {response.status_code}, {type(response.status_code)}")
+                    if response.status_code == 401 :
+                        next_status, next_proxies = next_proxy()
+                        if next_status :
+                            self.proxies = next_proxies
+                            print(f"proxies 토큰 변경 : {self.proxies}, {next_proxies}")
+                        else :
+                            print(f"Error : {next_proxies}")  
+                            exit(1)                      
+                except Exception as ee :
+                    print(ee) 
+
                 print(f"Retry count : {retry_count}, request url : {base_url} ==== response code ; {response.status_code}")
 
-            json_response = response.json()
-            if 'browserHtml' in json_response['data']:
-                html_content = json_response['data']['browserHtml']
-            else:
-                # html_content = base64.b64decode(json_response['data']['httpResponseBody']).decode()               
-                html_content = base64.b64decode(json_response['data']['httpResponseBody'], validate=True).decode('utf-8', errors='ignore')  
-
             if response.status_code == 200 :
-                soup = BeautifulSoup(html_content, "html.parser")
+                # json_response = response.json()
+                # print(json_response.keys())
+                # html_content = json_response['content']
+                # soup = BeautifulSoup(html_content, "html.parser")
+                soup = BeautifulSoup(response.text, "html.parser")
                 specs_list_tag = soup.find('div', id="specs-list")
 
                 if specs_list_tag :
@@ -169,6 +207,7 @@ class gsmarena_sp_spec_detail :
 
         except Exception as e :
             success = False
+            print(e)
             return success, [f"Error occurred : {str(e)}"]
         
         # self.to_print(device_model)

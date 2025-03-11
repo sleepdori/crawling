@@ -1,5 +1,4 @@
 import oracledb
-import pandas as pd
 
 class OracleDBManager:
     def __init__(self, user, password, dsn):
@@ -40,7 +39,19 @@ class OracleDBManager:
         try:
             if not self.check_connection():
                 raise oracledb.Error("Database connection is not available.")
-            self.cursor.execute(sql, params)
+            # self.cursor.execute(sql, params)
+            self.cursor.prepare(sql)
+            
+            # prepare()로 필요한 변수만 추출
+            required_bind_vars = {var for var in self.cursor.bindnames()}
+
+            # 필요한 변수만 필터링
+            filtered_params = {key: params[key] for key in required_bind_vars if params.get(key) is not None}
+
+            print(f"required_bind_vars : {required_bind_vars}, filtered_params : {filtered_params}")
+            # SQL 실행
+            self.cursor.execute(sql, filtered_params)
+            
             return True
         except oracledb.Error as error:
             print(f"Query Execution Error: {error}")
@@ -57,7 +68,7 @@ class OracleDBManager:
         try:
             if not self.check_connection():
                 raise oracledb.Error("Database connection is not available.")
-            self.cursor.executemany(sql, df)
+            self.cursor.executemany(sql, df.to_records(index=False))
             self.conn.commit()
             print("Data Load OK!!")
             return True
@@ -69,7 +80,19 @@ class OracleDBManager:
         try:
             if not self.check_connection():
                 raise oracledb.Error("Database connection is not available.")
-            self.cursor.execute(sql, params)
+            # self.cursor.execute(sql, params)
+            self.cursor.prepare(sql)
+            
+            # prepare()로 필요한 변수만 추출
+            required_bind_vars = {var for var in self.cursor.bindnames()}
+
+            # 필요한 변수만 필터링
+            filtered_params = {key: params[key] for key in required_bind_vars if params.get(key) is not None}
+
+            print(f"required_bind_vars : {required_bind_vars}, filtered_params : {filtered_params}")
+            # SQL 실행
+            self.cursor.execute(sql, filtered_params)
+            
             columns = [col[0] for col in self.cursor.description]
             rows = self.cursor.fetchall()
             result = [dict(zip(columns, row)) for row in rows]

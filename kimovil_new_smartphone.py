@@ -45,9 +45,11 @@ if load_database_type.lower() == 'oracle' :
 elif load_database_type.lower() == 'postgresql' :
     db_mgr = PostgreSQLManager(DB_USER, DB_PASS, HOST, PORT, DATABASE)
 
-max_sp_no_query = config.get("crawling", "kimovil","query", use_connection_nm, "max_sp_no_query")
 sp_no = 1
+max_sp_no_query = config.get("crawling", "kimovil","query", use_connection_nm, "max_sp_no_query")
 is_sp_model_check_query = config.get("crawling", "kimovil","query", use_connection_nm, "is_exists_query")
+kimovil_delete_query = config.get("crawling", "gsmarena", "query", use_connection_nm, 'delete_query')
+
 # 연결 시도
 connected = db_mgr.check_connection()
 if not connected:
@@ -94,16 +96,18 @@ for device_index, model_info in new_sp_target_list.iterrows() :
         print(f"url info : {model_info['device_link']} , db check count : {is_cnt} ")
         if is_cnt > 0 :
             is_check = True
-            new_sp_target_list.drop(index=device_index, inplace=True)
-            new_sp_target_spec = new_sp_target_spec.query(f"{model_info['device_seq']} != '35'")
-    if is_check == False :
-        print(f"device_index : {device_index}, url info : {model_info['device_link']}")
-        new_sp_target_spec.loc[new_sp_target_spec['device_seq'] == model_info['device_seq'], "device_seq"] = sp_no
-        new_sp_target_list.at[device_index, 'device_seq'] = sp_no
-        
-        sp_no += 1
+            params = {'LINK_URL' : model_info['device_link']}
+            db_mgr.delete(kimovil_delete_query, params)
+            # new_sp_target_list.drop(index=device_index, inplace=True)
+            # new_sp_target_spec = new_sp_target_spec.query(f"{model_info['device_seq']} != {new_sp_target_spec['device_seq']}")
+            
+    print(f"device_index : {device_index}, url info : {model_info['device_link']}")
+    new_sp_target_spec.loc[new_sp_target_spec['device_seq'] == model_info['device_seq'], "device_seq"] = sp_no
+    new_sp_target_list.at[device_index, 'device_seq'] = sp_no
+    
+    sp_no += 1
 
-        time.sleep(1)
+    time.sleep(1)
 
 # 크롤링 한 원천 결과 파일 저장
 print(spec_src_json_file_name, f"model count {len(new_sp_target_spec)}")

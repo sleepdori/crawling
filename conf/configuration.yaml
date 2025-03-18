@@ -31,6 +31,7 @@ default:
                 crow_pg :
                     max_sp_no_query : "SELECT MAX(SP_NO) + 1 AS \"MAX_SP_NO\" FROM   INIT.DL_SP_SPEC_EXTR_KMVL_RAW"
                     is_exists_query : "SELECT COUNT(1) AS \"CNT\" FROM   INIT.DL_SP_SPEC_EXTR_KMVL_RAW  WHERE  LINK_URL = '{}' "
+                    delete_query : "DELETE FROM SMIP_SLSI_DEV.DL_SP_SPEC_EXTR_KMVL_RAW  WHERE  LINK_URL = :LINK_URL"
 
         gsmarena :
             sp_list : gsmarena_sp_list.json  
@@ -44,6 +45,7 @@ default:
                 crow_pg :
                     is_exists_query : "SELECT COUNT(1) AS \"CNT\" FROM INIT.DL_SP_SPEC_EXTR_GSM_RAW  WHERE  BRND_NM = %s AND MODEL_NM = %s"
                     max_sp_no_query : "SELECT MAX(SP_NO) + 1 AS \"MAX_SP_NO\" FROM   SMIP_SLSI_DEV.DL_SP_SPEC_EXTR_GSM_RAW"
+                    delete_query : "DELETE FROM SMIP_SLSI_DEV.DL_SP_SPEC_EXTR_GSM_RAW  WHERE BRND_NM = :BRND_NM AND MODEL_NM = :MODEL_NM"
 
     excel_load :
         map_file : excel_to_table_map.xlsx

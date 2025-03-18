@@ -46,6 +46,7 @@ elif load_database_type.lower() == 'postgresql' :
 
 gsmarena_is_exists_query = config.get("crawling", "gsmarena", "query", use_connection_nm, 'is_exists_query')
 gsmarena_max_sp_no_query = config.get("crawling", "gsmarena", "query", use_connection_nm, 'max_sp_no_query')
+gsmarena_delete_query = config.get("crawling", "gsmarena", "query", use_connection_nm, 'delete_query')
 
 print(f"get gsmarena_is_exists_query : {gsmarena_is_exists_query}")
 # 연결 시도
@@ -88,12 +89,14 @@ for m_index, model_info in df.iterrows() :
         is_cnt = row['CNT']
         if is_cnt > 0 :
             print(f"brand_name : {brand_name}, model_name : {model_name} 는 존재하는 모델입니다.")
-        else :
-            model_info['device_seq'] = sp_no + int(model_info['device_seq'])
-            sp_no += 1
-            print(f"brand_name : {brand_name}, model_name : {model_name} 는 신규 모델입니다. {type(model_info)}")
-            
-            new_df.append(model_info.to_dict())
+            params = {"BRND_NM": brand_name, "MODEL_NM": model_name}
+            db_mgr.delete(gsmarena_delete_query, params)
+                        
+        model_info['device_seq'] = sp_no + int(model_info['device_seq'])
+        sp_no += 1
+        print(f"brand_name : {brand_name}, model_name : {model_name} 는 신규 모델입니다. {type(model_info)}")
+        
+        new_df.append(model_info.to_dict())
 
 
     time.sleep(0.2)  # 요청 간 딜레이 추가
